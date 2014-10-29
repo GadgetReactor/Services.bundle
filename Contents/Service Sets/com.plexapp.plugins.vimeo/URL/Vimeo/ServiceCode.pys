@@ -2,6 +2,10 @@ API_URL = 'http://vimeo.com/api/v2/video/%s.json'
 RE_VIMEO_ID = Regex('(\d{6,})')
 RE_CONTROL_CHARS = Regex(u'[\u0000-\u001F]')
 
+# for VIMEO videos without JSON response
+NORMAL_URL = 'http://player.vimeo.com/video/%s'
+import re
+
 HTTP_HEADERS = {
 	'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/36.0.1985.125 Safari/537.36'
 }
@@ -26,11 +30,19 @@ def MetadataObjectForURL(url):
 		if e.code == 403:
 			raise Ex.MediaNotAuthorized
 		elif e.code == 404:
-			raise Ex.MediaNotAvailable
+			try:
+				page = HTTP.Request(NORMAL_URL % url.split('/')[-1]).content
+				match=re.compile("<title>(.+?)</title>").findall(page)
+				return VideoClipObject	(
+							title = match[0]		
+							)
+			except:
+				raise Ex.MediaNotAvailable
 		else:
 			raise Ex.MediaNotAvailable
 	except:
 		raise Ex.MediaNotAvailable
+
 
 	if not json_obj:
 		raise Ex.MediaNotAvailable
@@ -87,7 +99,7 @@ def MediaObjectsForURL(url):
 ####################################################################################################
 @indirect
 def PlayVideo(url, bitrate=5000, resolution='1080', **kwargs):
-
+	
 	if not url:
 		raise Ex.MediaNotAvailable
 
@@ -98,7 +110,19 @@ def PlayVideo(url, bitrate=5000, resolution='1080', **kwargs):
 		if e.code == 403:
 			raise Ex.MediaNotAuthorized
 		elif e.code == 404:
-			raise Ex.MediaNotAvailable
+			try:
+				page = HTTP.Request(NORMAL_URL % url.split('/')[-1]).content
+				match=re.compile('"profile".+?"url":"(.+?)",.+?bitrate":(.+?),"').findall(page)
+				x=0
+				for url_quality, bitrate in match:
+					if int(bitrate) > x: 
+						video_url=url_quality
+						x=int(bitrate)
+				# currently returns the best quality stream, will include select function
+				return IndirectResponse(VideoClipObject, key=video_url)
+			except:
+				raise Ex.MediaNotAvailable
+
 		else:
 			raise Ex.MediaNotAvailable
 	except:
@@ -157,3 +181,5 @@ def PlayVideo(url, bitrate=5000, resolution='1080', **kwargs):
 ####################################################################################################
 # Queue fix (PlayVideoIndirect was renamed to PlayVideo at some point)
 PlayVideoIndirect = PlayVideo
+
+
